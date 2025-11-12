@@ -2,7 +2,9 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { describeImage, expandImage } from './services/geminiService';
 import { fileToGenerativePart } from './utils/fileUtils';
 import { ASPECT_RATIOS, AspectRatio } from './constants';
-import { UploadIcon, SparklesIcon, ArrowPathIcon, ExclamationTriangleIcon } from './components/Icons';
+import { UploadIcon, SparklesIcon, ArrowPathIcon, ExclamationTriangleIcon, GoogleDriveIcon } from './components/Icons';
+import { GoogleDriveBrowser } from './components/GoogleDriveBrowser';
+import { DriveFile, googleDriveService } from './services/googleDriveService';
 
 type AppState = 'idle' | 'describing' | 'ready' | 'generating' | 'done' | 'error';
 
@@ -14,6 +16,7 @@ const App: React.FC = () => {
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [appState, setAppState] = useState<AppState>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [isDriveBrowserOpen, setIsDriveBrowserOpen] = useState<boolean>(false);
   
   const handleReset = () => {
     setOriginalFile(null);
@@ -31,6 +34,26 @@ const App: React.FC = () => {
       setOriginalFile(file);
       setOriginalImagePreview(URL.createObjectURL(file));
       setAppState('describing');
+    }
+  };
+
+  const handleDriveFileSelect = async (driveFile: DriveFile) => {
+    setIsDriveBrowserOpen(false);
+    setAppState('describing');
+
+    try {
+      // Download the file from Google Drive
+      const blob = await googleDriveService.downloadFile(driveFile.id);
+
+      // Convert blob to File object
+      const file = new File([blob], driveFile.name, { type: driveFile.mimeType });
+
+      setOriginalFile(file);
+      setOriginalImagePreview(URL.createObjectURL(blob));
+    } catch (err) {
+      console.error('Failed to load file from Google Drive:', err);
+      setErrorMessage('Failed to load file from Google Drive. Please try again.');
+      setAppState('error');
     }
   };
 
@@ -143,10 +166,20 @@ const App: React.FC = () => {
         );
       case 'idle':
         return (
-          <div className="relative block w-full rounded-lg border-2 border-dashed border-gray-600 p-12 text-center hover:border-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-900">
-            <UploadIcon className="mx-auto h-12 w-12 text-gray-500" />
-            <span className="mt-2 block text-sm font-semibold text-gray-400">Upload an image to start</span>
-            <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+          <div className="flex flex-col gap-4">
+            <div className="relative block w-full rounded-lg border-2 border-dashed border-gray-600 p-12 text-center hover:border-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-900">
+              <UploadIcon className="mx-auto h-12 w-12 text-gray-500" />
+              <span className="mt-2 block text-sm font-semibold text-gray-400">Upload an image to start</span>
+              <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+            </div>
+            <div className="text-center text-gray-500 text-sm">or</div>
+            <button
+              onClick={() => setIsDriveBrowserOpen(true)}
+              className="w-full flex items-center justify-center gap-3 rounded-lg border-2 border-gray-600 p-6 text-center hover:border-gray-500 hover:bg-gray-800/50 transition-colors"
+            >
+              <GoogleDriveIcon className="h-8 w-8" />
+              <span className="text-sm font-semibold text-gray-400">Browse Google Drive</span>
+            </button>
           </div>
         );
       default:
@@ -243,6 +276,12 @@ const App: React.FC = () => {
           {renderContent()}
         </div>
       </main>
+
+      <GoogleDriveBrowser
+        isOpen={isDriveBrowserOpen}
+        onClose={() => setIsDriveBrowserOpen(false)}
+        onSelectFile={handleDriveFileSelect}
+      />
     </div>
   );
 };
